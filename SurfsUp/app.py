@@ -41,8 +41,8 @@ def homepage():
         f"/api/v1.0/precipitation<br/>"
         f"/api/v1.0/stations<br/>"
         f"/api/v1.0/tobs<br/>"
-        f"/api/v1.0/<start><br/>"
-        f"/api/v1.0/<start>/<end><br/>"
+        f"Temperature information from the start date(yyyy-mm-dd): /api/v1.0/<start><br/>"
+        f"Temperature information from start to end dates(yyyy-mm-dd): /api/v1.0/<start>/<end>"
     )
 
 @app.route("/api/v1.0/precipitation")
@@ -118,7 +118,12 @@ def tobs():
 # the average temperature, and the maximum temperature for a specified start or start-end range.
 
 @app.route("/api/v1.0/<start>")
-def start():
+def start(start):
+
+    # Convert the start parameter to a datetime object
+    start_date = dt.datetime.strptime(start, "%Y-%m-%d").date()
+
+    first_date = start_date - dt.timedelta(days=365)
 
     # Create our session (link) from Python to the DB
     session = Session(engine)
@@ -136,14 +141,46 @@ def start():
 
         tobs_dict = {}
 
-        start_date_tobs_dict["min_temp"] = min
-        start_date_tobs_dict["avg_temp"] = avg
-        start_date_tobs_dict["max_temp"] = max
+        tobs_dict["min_temp"] = min
+        tobs_dict["avg_temp"] = avg
+        tobs_dict["max_temp"] = max
 
         start_date_tobs.append(tobs_dict
                                ) 
         
     return jsonify(start_date_tobs)
+
+# Calculate statistics for start and end date
+
+@app.route("/api/v1.0/<start>/<end>")
+def date_range(start, end):
+    # Convert the start and end parameters to datetime objects
+    start_date = dt.datetime.strptime(start, "%Y-%m-%d").date()
+    end_date = dt.datetime.strptime(end, "%Y-%m-%d").date()
+
+    start = start_date - dt.timedelta(days=365)
+    end = end_date - dt.timedelta(days=365)
+
+    # Create our session (link) from Python to the DB
+    session = Session(engine)
+
+    # Query for date range statistics
+    date_range_statistics = session.query(
+        func.min(Measurements.tobs),
+        func.avg(Measurements.tobs),
+        func.max(Measurements.tobs)
+    ).filter(Measurements.date >= start, Measurements.date <= end).all()
+
+    session.close()
+
+    # Convert the result to a dictionary for JSON response
+    result_dict = {
+        "start_date": start_date.isoformat(),
+        "end_date": end_date.isoformat(),
+        "date_range_statistics": date_range_statistics
+    }
+
+    return jsonify(result_dict)
 
 # 4. Define main behavior
 if __name__ == "__main__":
